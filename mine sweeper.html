@@ -1,0 +1,347 @@
+<html>
+    <style>
+        .box {
+            position: absolute;
+            width : 20px;
+            height : 20px;
+            padding : 0;
+            background-color: #B9B9B9;
+        }
+
+        .box.active:hover {
+            background-color : white;
+        }
+
+        .resetBox {
+            position: absolute;
+            width : 30px;
+            height : 30px;
+        }
+
+        .scoreBox {
+            position: absolute;
+            width : 60px;
+            height : 30px;
+            border : 1px solid black;
+            text-align : center;
+        }
+
+        .gameMenu {
+            position : absolute;
+            width : 50px;
+            height : 50px;
+            text-align: center;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.slim.min.js"></script>
+    <script>
+        var board = [];
+        const size = 20;    // box size
+        const img_size = 16;    // img size
+        var solved = 0;
+        const one_min = 60; // 1min = 60sec
+        var sec = 0;
+        var min = 0;
+        var timer_start = false;
+        // clearBoard() clears board and removes div
+        // effects: modifies board
+        //          removes (board length) amount of div's
+        function resetGame() {
+            solved = 0;
+            sec = 0;
+            min = 0;
+            for (var arr of board) {
+                for (var btn of arr) {
+                    btn.remove();
+                }
+                $("div").remove();
+            }
+            board = [];
+
+            var resetElement = document.getElementById("RESET");
+            if (resetElement) resetElement.remove();
+            resetElement = document.getElementById("SCORE");
+            if (resetElement) resetElement.remove();
+            resetElement = document.getElementById("TIME");
+            if (resetElement) resetElement.remove();
+
+            if(timer_start) {
+                clearTimeout(timer_start);
+                timer_start = false;
+            }
+        }
+
+        // scoreBoard() displays scoreboard
+        function scoreBoard(x, y) {
+            var span = $("<span/>").appendTo($("body"));
+            span.addClass("scoreBox");
+            span.css({left : '70px', top : '10px'})
+            span.text(solved + '/' + (x*y - x));
+            span.attr("id","SCORE");
+            // left score box: ----------------------------   
+            span =  $("<span/>").appendTo($("body"));
+            span.addClass("scoreBox");
+            span.css({left : 70 + size * y - 60 + 'px', top : '10px'})
+            span.text(solved + '/' + (x*y - x));
+            span.attr("id","TIME");
+        }
+
+        // updateScore(len) updates the scoreboards
+        function updateScore(len) {
+            var score = document.getElementById("SCORE");
+            score.textContent= solved + '/' + (len*len-len);
+        }
+
+        // showTime() updates the time every second
+        function showTime() {
+            var mill_in_sec = 1000;
+            timer_start = true;
+            sec++;
+            if (sec == one_min) {
+                sec = 0;
+                min++;
+            }
+            var output = "";
+            if (min < 10) {
+                output = output + "0" + min + ":";
+            } else {
+                output = output + min + ":";
+            }
+            if (sec  <10) {
+                output = output + "0" + sec;
+            } else {
+                output = output + sec;
+            }
+            var time = document.getElementById("TIME");
+            time.textContent = output;
+            timer_start = setTimeout(showTime, mill_in_sec);
+        }
+
+        // containsPoint(arr, x, y) determines if point x,y is in arr
+        // param: Arrayof (int, int), int, int
+        // out: bool
+        function containsPoint(arr, pos_x, pos_y) {
+            var flag = false;
+            arr.forEach(function(item){
+                if (item.x == pos_x && item.y == pos_y) {
+                    flag = true;
+                }
+            });
+            return flag;
+        }
+
+        // randomMines(num, x, y) creates num mines in a x by y field
+        // param: int, int, int
+        // out: Arrayof (int, int)
+        function randomMines(num, x, y) {
+            var arr=[]; // use to store all points
+            for (var i =0; i < num; i++) {  // create num random points
+                var pos = {x:0, y:0};
+                do {    // re-randomize if a random point is already in arr
+                    pos = {x:Math.round(Math.random() * x), y:Math.round(Math.random() * y)}
+                } while (containsPoint(arr, pos.x, pos.y));
+                arr.push(pos); 
+            }
+            return arr;
+        }
+
+        // countMines(button) produces amount of mines surrounding button
+        // param: Button
+        // out: int
+        function countMines(button) {
+            var rowMax = board.length;
+            var colMax = board[0].length;
+            var row = button.data("Row");
+            var col = button.data("Col");
+            var count = 0;
+
+            // validPoint(row, col) determines if col and row are valid
+            // param: int, int
+            // out: bool
+            function validPoint(row, col) {
+                if (0 <= col && col < colMax && 0 <= row && row < rowMax) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+            // modifyCount(row, col) add count if theres a mine at board[col][row]
+            // param: int, int
+            function modifyCount(row, col) {
+                if (validPoint(row, col)) {
+                    if (board[row][col].data("Mine")) count++;
+                }
+            }
+            // check each surrounding 8 for mines
+            modifyCount(row,col-1);
+            modifyCount(row,col+1);
+            modifyCount(row-1,col-1);
+            modifyCount(row-1,col);
+            modifyCount(row-1,col+1);
+            modifyCount(row+1,col-1);
+            modifyCount(row+1,col);
+            modifyCount(row+1,col+1);
+            return count;
+        }
+
+        // modifyField(button) modifies the mine field when button is pressed
+        // effects: modifies buttons in board
+        function modifyField(button) {
+            var mine_count = countMines(button);
+            var rowMax = board.length;
+            var colMax = board[0].length;
+            var row = button.data("Row");
+            var col = button.data("Col");
+            button.attr("disabled", true);
+            button.removeClass("active");
+            solved++;   // keep track of solved spots
+            // same as vailidPoint in countMines
+            function validPoint(row, col) {
+                if (0 <= col && col < colMax && 0 <= row && row < rowMax) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+            // extendModify(row, col) calls modifyField(btn) where btn is button at col and row
+            function extendModify(row, col) {
+                if (validPoint(row, col)) {
+                    var button = board[row][col];
+                    if (!button.attr("disabled")) {
+                        modifyField(button);
+                    }
+                }
+            }
+
+            if (button.children().length) {
+                button.children().remove();
+                button.data("Flag", false);
+            }
+            if (mine_count > 0) {
+                button.text(mine_count);
+            } else {    // recursively check the 8 surrounding buttons
+                extendModify(row,col-1);
+                extendModify(row,col+1);
+                extendModify(row-1,col-1);
+                extendModify(row-1,col);
+                extendModify(row-1,col+1);
+                extendModify(row+1,col-1);
+                extendModify(row+1,col);
+                extendModify(row+1,col+1); 
+            }         
+        }
+
+        // showMines() reveals all mines and disable all buttons
+        function showMines() {
+            if (timer_start) {
+                clearTimeout(timer_start);
+                timer_start = false;
+            }
+            for (var arr of board) {
+                for (var button of arr) {
+                    if (button.data("Mine")) {
+                        button.text("M");
+                    }
+                    button.attr("disabled", true);
+                    button.removeClass("active");
+                }
+            }
+        }
+
+        // displayWin() displays win (if won)
+        function displayWin() {
+            var len = board.length;
+            if (solved == len * len - len) {
+                showMines();
+                alert("WIN");
+            }
+        }
+
+        // setResetButton(button, x, y) modifies button
+        // param: Button, int, int
+        function setResetButton(button, x, y) {
+            var shiftLeft =  size * x / 2 - 15 + 70;
+            var shiftTop = 10;
+            button.addClass("resetBox");
+            button.css({width:'30px', height:'30px', top: shiftTop + 'px', left : shiftLeft + 'px'});
+            button.attr("id", "RESET");
+            button.click(function(e) {
+                $(e.target).remove();
+                putButtons(x, y);
+            })
+        }
+
+        // setButton(button, i, ii, mines) modifies button
+        // param: Button
+        function setButton(button, i, ii, mines) {
+            var shiftLeft = size * ii + 70;
+            var shiftTop = size * i + 50;
+            button.addClass("box").addClass("active");
+            button.css({ left : shiftLeft + 'px', top : shiftTop + 'px'});
+            button.data("Mine", false);
+            button.data("Row", i);
+            button.data("Col", ii);
+            button.data("Flag", false);
+            if (containsPoint(mines, ii, i)) {
+                button.data("Mine", true);
+            }
+            button.click(function(e){
+                if (!$(e.target).data("Flag")) { // does not respond to left click if flagged
+                    if ($(e.target).data("Mine")) {
+                        showMines();
+                        alert("LOSE");
+                    } else {
+                        modifyField($(e.target));
+                        updateScore(board.length);
+                        displayWin();
+                    }
+                }
+            });
+            button.contextmenu(function(e) {
+                if ($(e.target).is('img')) {
+                    $(e.target).parent().data("Flag", false);
+                    $(e.target).remove();
+                } else {
+                    var img = 
+                        $("<img width=" + img_size + " src = 'images/flag.png'>").appendTo($(e.target));
+                    $(e.target).html(img);
+                    $(e.target).data("Flag", true);
+                }
+                return false;
+            });
+        }
+
+        // putButtons(x, y) creates x*y buttons
+        // param: int, int
+        // effects: produces buttons
+        function putButtons(x, y) {
+            resetGame();
+            scoreBoard(x, y);
+            showTime();
+            var button = $("<button/>").appendTo($("body"));
+            setResetButton(button, x, y);
+            var mines = randomMines(x*y/10, x - 1, y - 1);    // x*y/10 number of mines
+            mines.forEach(function(item){
+                console.log(item);
+            });
+            for(var i = 0; i < x; i++) {    // each row
+                var col = [];
+                var dividor = $("<div/>").appendTo($("body")); // create div in body
+                for (var ii = 0; ii < y; ii++) {    // each column
+                    button = $("<button/>");
+                    setButton(button, i, ii, mines);
+                    button.appendTo(dividor);
+                    col.push(button);
+                }
+                board.push(col); 
+            }
+        }
+    </script>
+    <body>
+        <button onclick="putButtons(10, 10)" class = "gameMenu" style = "top : 10px; left : 10px">10x10</button>
+        <button onclick="putButtons(19, 19)" class = "gameMenu" style = "top : 70px; left : 10px">19x19</button>
+        <button onclick="putButtons(29, 29)" class = "gameMenu" style = "top : 130px; left : 10px">29x29</button>
+    </body>
+</html>
